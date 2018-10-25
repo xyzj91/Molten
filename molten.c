@@ -445,7 +445,7 @@ PHP_FUNCTION(molten_curl_exec)
 
         /* record response if response exist */
         if (return_value != NULL && MO_Z_TYPE_P(return_value) == IS_STRING && Z_STRLEN_P(return_value) > 0) {
-#define RESPONSE_MAX_LEN 128
+#define RESPONSE_MAX_LEN PTG(response_length)
             int response_len = Z_STRLEN_P(return_value);
             char *response_string = NULL;
             if (response_len > RESPONSE_MAX_LEN) {
@@ -615,6 +615,8 @@ PHP_INI_BEGIN()
     STD_PHP_INI_ENTRY("molten.sink_syslog_unix_socket", "",           PHP_INI_SYSTEM, OnUpdateString, sink_syslog_unix_socket, zend_molten_globals, molten_globals)
     STD_PHP_INI_ENTRY("molten.sink_kafka_brokers",    "",             PHP_INI_SYSTEM, OnUpdateString, sink_kafka_brokers, zend_molten_globals, molten_globals)
     STD_PHP_INI_ENTRY("molten.sink_kafka_topic",      "",             PHP_INI_SYSTEM, OnUpdateString, sink_kafka_topic, zend_molten_globals, molten_globals)
+    STD_PHP_INI_ENTRY("molten.response_length",      "128",           PHP_INI_SYSTEM, OnUpdateLong, response_length, zend_molten_globals, molten_globals)
+
 PHP_INI_END()
 
 /* php_trace_init_globals */
