@@ -18,9 +18,11 @@
 #if PHP_VERSION_ID < 70000
 #define GET_FUNC_ARG(param, arg_num)    zval *param = (frame->ori_args)[arg_num]
 #define GET_FUNC_ARG_UNDEC(param, arg_num) param = (frame->ori_args)[arg_num]
+#define GET_FUNC_RETURN_REF(param) zval *param = frame->ori_ret
 #else
 #define GET_FUNC_ARG(param, arg_num)    zval *param = ((zval *)(frame->ori_args) + arg_num)
 #define GET_FUNC_ARG_UNDEC(param, arg_num) param = ((zval *)(frame->ori_args) + arg_num)
+#define GET_FUNC_RETURN_REF(param) zval *param = frame->ori_ret
 #endif
 
 /* {{{ pt intercept hit function */
@@ -163,20 +165,83 @@ static void file_contents_record(mo_interceptor_t *pit, mo_frame_t *frame)
     mo_chain_add_span(pit->pct->pcl, span);
 }
 
+
+/*******************************************************/
+/********************stream_socket_client***************/
+/*******************************************************/
+static void stream_socket_client_record(mo_interceptor_t *pit, mo_frame_t *frame)
+{
+    if (frame->arg_count < 1) {
+        return;
+    }
+    GET_FUNC_ARG(socket_address,    0);
+
+    zval *span = build_com_record(pit, frame, 0);
+
+    if (MO_Z_TYPE_P(socket_address) == IS_STRING) {
+        pit->psb->span_add_ba_ex(span, "socket.address", Z_STRVAL_P(socket_address), frame->exit_time, pit->pct, BA_NORMAL);
+    }
+
+    mo_chain_add_span(pit->pct->pcl, span);
+}
+
+/*******************************************************/
+/******** fwrite/stream_socket_sendto ******************/
+/*******************************************************/
+static void fwrite_record(mo_interceptor_t *pit, mo_frame_t *frame)
+{
+    if (frame->arg_count < 2) {
+        return;
+    }
+    zval *span = build_com_record(pit, frame, 0);
+
+    /* add content */
+    GET_FUNC_ARG(content,1);
+    if (frame->arg_count >= 2 && MO_Z_TYPE_P(content) == IS_STRING) {
+        pit->psb->span_add_ba_ex(span,  "fwrite.data", Z_STRVAL_P(content), frame->entry_time, pit->pct, BA_NORMAL);
+    }
+
+    mo_chain_add_span(pit->pct->pcl, span);
+}
+
+/*******************************************************/
+/******************** fgets  ***************************/
+/*******************************************************/
+static void fgets_record(mo_interceptor_t *pit, mo_frame_t *frame)
+{
+    char *result = NULL;
+    if (frame->arg_count < 1) {
+        return;
+    }
+    zval *span = build_com_record(pit, frame, 0);
+
+    /* add content */
+    GET_FUNC_ARG(socket_resource,0);
+    GET_FUNC_RETURN_REF(response);
+    if(response!=NULL){
+        pit->psb->span_add_ba_ex(span,  "fgets.data", Z_STRVAL_P(response), frame->entry_time, pit->pct, BA_NORMAL);
+    }
+
+    mo_chain_add_span(pit->pct->pcl, span);
+}
+
 /*******************************************************/
 /********************fsockopen**********************/
 /*******************************************************/
 static void fsockopen_record(mo_interceptor_t *pit, mo_frame_t *frame)
 {
+
     if (frame->arg_count < 1) {
         return;
     }
-    GET_FUNC_ARG(file_path, 0);
+    GET_FUNC_ARG(socket_address,    0);
+    char *value_param = convert_args_to_string(frame);
 
     zval *span = build_com_record(pit, frame, 0);
 
-    if (MO_Z_TYPE_P(file_path) == IS_STRING) {
-        pit->psb->span_add_ba_ex(span, "file.path", Z_STRVAL_P(file_path), frame->exit_time, pit->pct, BA_NORMAL);
+    if (MO_Z_TYPE_P(socket_address) == IS_STRING) {
+        pit->psb->span_add_ba_ex(span, "socket.address", Z_STRVAL_P(socket_address), frame->exit_time, pit->pct, BA_NORMAL);
+        pit->psb->span_add_ba_ex(span,  "socket.param", value_param, frame->exit_time, pit->pct, BA_NORMAL);
     }
 
     mo_chain_add_span(pit->pct->pcl, span);
@@ -187,37 +252,18 @@ static void fsockopen_record(mo_interceptor_t *pit, mo_frame_t *frame)
 /*******************************************************/
 static void fputs_record(mo_interceptor_t *pit, mo_frame_t *frame)
 {
-    if (frame->arg_count < 1) {
-        return;
-    }
-    GET_FUNC_ARG(file_path, 0);
+    if (frame->arg_count < 2) {
+            return;
+        }
+        zval *span = build_com_record(pit, frame, 0);
 
-    zval *span = build_com_record(pit, frame, 0);
+        /* add content */
+        GET_FUNC_ARG(content,1);
+        if (frame->arg_count >= 2 && MO_Z_TYPE_P(content) == IS_STRING) {
+            pit->psb->span_add_ba_ex(span,  "fputs.data", Z_STRVAL_P(content), frame->entry_time, pit->pct, BA_NORMAL);
+        }
 
-    if (MO_Z_TYPE_P(file_path) == IS_STRING) {
-        pit->psb->span_add_ba_ex(span, "file.path", Z_STRVAL_P(file_path), frame->exit_time, pit->pct, BA_NORMAL);
-    }
-
-    mo_chain_add_span(pit->pct->pcl, span);
-}
-
-/*******************************************************/
-/********************fgets**********************/
-/*******************************************************/
-static void fgets_record(mo_interceptor_t *pit, mo_frame_t *frame)
-{
-    if (frame->arg_count < 1) {
-        return;
-    }
-    GET_FUNC_ARG(file_path, 0);
-
-    zval *span = build_com_record(pit, frame, 0);
-
-    if (MO_Z_TYPE_P(file_path) == IS_STRING) {
-        pit->psb->span_add_ba_ex(span, "file.path", Z_STRVAL_P(file_path), frame->exit_time, pit->pct, BA_NORMAL);
-    }
-
-    mo_chain_add_span(pit->pct->pcl, span);
+        mo_chain_add_span(pit->pct->pcl, span);
 }
 
 
@@ -329,7 +375,7 @@ void build_curl_bannotation(zval *span, long timestamp, mo_interceptor_t *pit, z
             sprintf(tmp_string, "%ld", Z_LVAL_P(http_code));
 
             /* not set the ip and port to sa */
-            pit->psb->span_add_ba_ex(span, "http.status", tmp_string, timestamp, pit->pct, BA_NORMAL);
+            pit->psb->span_add_ba_ex(span, "http.status1", tmp_string, timestamp, pit->pct, BA_NORMAL);
         }
     }
 
@@ -1519,6 +1565,9 @@ void mo_intercept_ctor(mo_interceptor_t *pit, struct mo_chain_st *pct, mo_span_b
     INIT_INTERCEPTOR_ELE_TAG(file_put_contents,     &file_contents_record);
 
     /* socket */
+    INIT_INTERCEPTOR_ELE_TAG(stream_socket_client,  &stream_socket_client_record);
+    INIT_INTERCEPTOR_ELE_TAG(fwrite,                &fwrite_record);
+    INIT_INTERCEPTOR_ELE_TAG(stream_socket_sendto,  &fwrite_record);
     INIT_INTERCEPTOR_ELE_TAG(fsockopen,     &fsockopen_record);
     INIT_INTERCEPTOR_ELE_TAG(fputs,     &fputs_record);
     INIT_INTERCEPTOR_ELE_TAG(fgets,     &fgets_record);
